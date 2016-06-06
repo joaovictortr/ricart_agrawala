@@ -1,4 +1,4 @@
-CFLAGS= -O2 -std=c99 -Wshadow
+CFLAGS= -O2 -std=c99 -Wshadow -g
 BINDIR=bin
 TARGET=ricagr
 LDFLAGS= -lm
