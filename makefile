@@ -1,17 +1,17 @@
-all: nbndD12
+SUBDIRS = src
+DOXYGEN = /usr/bin/doxygen
 
-nbndD12: nbndD12.o smpl.o rand.o
-	$(LINK.c) -o $@ -Bstatic nbndD12.o smpl.o rand.o -lm
+.PHONY: all clean doc src
 
-smpl.o: smpl.c smpl.h
-	$(COMPILE.c)  -g smpl.c
+all: src
 
-nbndD12.o: nbndD12.c smpl.h
-	$(COMPILE.c) -g  nbndD12.c
+src:
+	$(MAKE) -C src/
 
-rand.o: rand.c
-	$(COMPILE.c) -g rand.c
+doc:
+	$(DOXYGEN) doxyfile
 
 clean:
-	$(RM) *.o nbndD12 relat saida
+	$(MAKE) -C src/ clean
+	@rm -rf doc/html doc/latex
 

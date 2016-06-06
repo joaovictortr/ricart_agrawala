@@ -17,7 +17,7 @@
 #include <sys/time.h>
 #include <limits.h>
 #include <getopt.h>
-#include "filap.h"
+#include "pqueue.h"
 #include "smpl.h"
 
 /* Events */
@@ -43,12 +43,17 @@ struct process_t {
     int timestamp;         ///< Lamport's timestamp
     int request_timestamp; ///< Timestamp of the pending request
     int recv_queue;        ///< Facility to receive messages
-    filap recvd_from;      ///< Priority Queue to order received messages
+    pqueue recvd_from;     ///< Priority Queue to order received messages
     int nreplies;          ///< Number of replies received for a request
     int *pending;          ///< Pending reply queue
 };
-typedef struct process_t *process;
+typedef struct process_t *process; ///< Pointer to a process_t structure
 
+/**
+ * Create process list
+ * @param pnum Number of processes in the system
+ * @return List of processes of the system
+ */
 process init_processes(int pnum)
 {
     process plist = malloc(sizeof(struct process_t) * pnum);
@@ -60,7 +65,7 @@ process init_processes(int pnum)
         plist[i].timestamp = 0;
         plist[i].request_timestamp = 0;
         plist[i].recv_queue = facility("recvq", pnum);
-        plist[i].recvd_from = cria_filap(pnum);
+        plist[i].recvd_from = create_pqueue(pnum);
         plist[i].nreplies = 0;
         plist[i].pending = malloc(sizeof(int) * pnum);
         memset(plist[i].pending, 0, sizeof(int) * pnum);
@@ -69,12 +74,18 @@ process init_processes(int pnum)
     return plist;
 }
 
+/**
+ * Destroy list of processes
+ * @param plist List of processes in the system
+ * @param pnum Number of processes in the system
+ * @return 1 when sucessful, otherwise 0
+ */
 int destroy_processes(process plist, int pnum)
 {
     if (plist == NULL) return 0;
 
     for(int i = 0; i < pnum; ++i) {
-        destroi_filap(plist[i].recvd_from);
+        destroy_pqueue(plist[i].recvd_from);
         free(plist[i].pending);
     }
     free(plist);
@@ -82,6 +93,14 @@ int destroy_processes(process plist, int pnum)
     return 1;
 }
 
+/**
+ * Send a message to +dst_pid+
+ * @param plist List of processes in the system
+ * @param pnum Number of processes in the system
+ * @param pid Source process ID
+ * @param dst_pid Destination process ID
+ * @param type Message type
+ */
 void send(process plist, int pnum, int pid, int dst_pid, int type)
 {
     int recv_at, recv_at_pri;
@@ -91,9 +110,9 @@ void send(process plist, int pnum, int pid, int dst_pid, int type)
 
     if (request(plist[dst_pid].recv_queue, pid, recv_at_pri) == 0) {
         // schedule receive on receiving process
-        insere_filap(plist[dst_pid].recvd_from, pid, plist[pid].timestamp, INT_MAX - time(), type);
+        insert_pqueue(plist[dst_pid].recvd_from, pid, plist[pid].timestamp, INT_MAX - time(), type);
 
-        printf("  |- %s scheduled to occur at time %g\n", type == MSG_REQUEST ? "REQUEST" : "REPLY", time() + recv_at);
+        printf("  |- %s scheduled to occur on process %d at time %g\n", type == MSG_REQUEST ? "REQUEST" : "REPLY", dst_pid, time() + recv_at);
 
         schedule(EV_RECV, recv_at, dst_pid);
     } else {
@@ -103,6 +122,12 @@ void send(process plist, int pnum, int pid, int dst_pid, int type)
     }
 }
 
+/**
+ * Broadcast REQUEST message to all processes in the system
+ * @param plist List of processes in the system
+ * @param pnum Number of processes in the system
+ * @param pid Requesting process ID
+ */
 void broadcast(process plist, int pnum, int pid)
 {
     for(int dst_pid = 0; dst_pid < pnum; ++dst_pid) {
@@ -112,6 +137,15 @@ void broadcast(process plist, int pnum, int pid)
     }
 }
 
+/**
+ * Receive message from the receiving queue
+ * @param plist List of processes in the system
+ * @param pnum Number of processes in the system
+ * @param pid Receiving process ID
+ * @param pid_from Source process ID
+ * @param timestamp_from Message timestamp
+ * @param type Message type
+ */
 void recv(process plist, int pnum, int pid, int pid_from, int timestamp_from, int type)
 {
     int lower_pri;
@@ -150,6 +184,12 @@ void recv(process plist, int pnum, int pid, int pid_from, int timestamp_from, in
     }
 }
 
+/**
+ * Release critical region
+ * @param plist List of processes in the system
+ * @param pnum Number of processes in the system
+ * @param pid ID of the process that will release the critical region
+ */
 void releasecr(process plist, int pnum, int pid)
 {
     for(int dst_pid = 0; dst_pid < pnum; ++dst_pid) {
@@ -161,6 +201,10 @@ void releasecr(process plist, int pnum, int pid)
     plist[pid].state = ST_RELEASED;
 }
 
+/**
+ * Print program usage options
+ * @param program_name Name of the program as it was invoked
+ */
 void print_usage(const char *program_name) {
     printf("Usage: %s --nproc <N> [--rc0 <request time>] [--rc1 <request time>] [--rc2 <request time>]\n\n", program_name);
     printf("Notes on the parameters:\n");
@@ -172,6 +216,9 @@ void print_usage(const char *program_name) {
     printf(" - current implementation was tested with at most 3 processes\n");
 }
 
+/**
+ * Print program header
+ */
 void print_header() {
     printf("-- BEGIN HEADER --\n");
     printf("Ricart-Agrawala algorithm simulation using SMPL\n");
@@ -196,7 +243,7 @@ int main(int argc, char **argv)
         p2_time = 0;       ///< Time at which process 2 will request the critical region
 
     struct timeval tp;
-    item_fila recvd_msg;
+    queue_item recvd_msg;
 
     print_header();
 
@@ -320,15 +367,15 @@ int main(int argc, char **argv)
 
             case EV_RECV:
                 // remove next message to be received by pid
-                recvd_msg = remove_max_filap(plist[pid].recvd_from);
+                recvd_msg = remove_max_pqueue(plist[pid].recvd_from);
                 // synchronize pid's logical clock on receive before processing the message
                 plist[pid].timestamp = (plist[pid].timestamp > recvd_msg->timestamp) ?
                     plist[pid].timestamp : recvd_msg->timestamp;
                 plist[pid].timestamp++;
 
-                printf("Process %d received %s from %d at time %g\n", pid, (recvd_msg->tipo == MSG_REQUEST) ? "REQUEST" : "REPLY", recvd_msg->pid, time());
+                printf("Process %d received %s from %d at time %g\n", pid, (recvd_msg->type == MSG_REQUEST) ? "REQUEST" : "REPLY", recvd_msg->pid, time());
 
-                recv(plist, pnum, pid, recvd_msg->pid, recvd_msg->timestamp, recvd_msg->tipo);
+                recv(plist, pnum, pid, recvd_msg->pid, recvd_msg->timestamp, recvd_msg->type);
                 break;
             case EV_RELEASE:
                 printf("Process %d released the critical region at time %g\n", pid, time());
