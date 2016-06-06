@@ -1,3 +1,17 @@
+/**
+ * Ricart-Agrawala algorithm simulation
+ *
+ * \file main.c
+ * \author: João Victor Tozatti Risso <jvtr12@inf.ufpr.br>
+ *
+ * Simulation of the Ricart-Agrawala algorithm for distributed mutual exclusion
+ * using SMPL.
+ *
+ * This simulation was implemented for the second programming assignment of the
+ * Fault-Tolerant Distributed Systems course taught by Prof. Dr. Elias P. Duarte Jr
+ * for Computer Science bachelor/master students at Universidade Federal do Paraná.
+ *
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
@@ -6,26 +20,32 @@
 #include "filap.h"
 #include "smpl.h"
 
-#define EV_REQUEST 1
-#define EV_RECV 2
-#define EV_REPLY 3
-#define EV_RELEASE 4
+/* Events */
+#define EV_REQUEST 1  ///< Request critical region
+#define EV_RECV 2     ///< Receive message
+#define EV_RELEASE 3  ///< Release critical region
 
-#define ST_RELEASED 5
-#define ST_WANTED 6
-#define ST_HELD 7
+/* Process states */
+#define ST_RELEASED 4 ///< Process released the critical region
+#define ST_WANTED 5   ///< Process wants to enter the critical region
+#define ST_HELD 6     ///< Process is executing the critical region
 
-#define MSG_REQUEST 8
-#define MSG_REPLY 9
+/* Message types */
+#define MSG_REQUEST 7 ///< Message to request the critical region
+#define MSG_REPLY 8   ///< Message to reply a request
 
+/** \struct process_t
+ *
+ * Represents a process in the distributed system
+ */
 struct process_t {
-    int state;
-    int timestamp;
-    int request_timestamp;
-    int recv_queue;
-    filap recvd_from;
-    int nreplies;
-    int *pending;
+    int state;             ///< Process state (can be ST_{RELEASED, WANTED, HELD})
+    int timestamp;         ///< Lamport's timestamp
+    int request_timestamp; ///< Timestamp of the pending request
+    int recv_queue;        ///< Facility to receive messages
+    filap recvd_from;      ///< Priority Queue to order received messages
+    int nreplies;          ///< Number of replies received for a request
+    int *pending;          ///< Pending reply queue
 };
 typedef struct process_t *process;
 
@@ -85,8 +105,6 @@ void send(process plist, int pnum, int pid, int dst_pid, int type)
 
 void broadcast(process plist, int pnum, int pid)
 {
-    int recv_at, recv_at_pri;
-
     for(int dst_pid = 0; dst_pid < pnum; ++dst_pid) {
         if (dst_pid == pid) continue;
 
@@ -166,12 +184,17 @@ void print_header() {
 
 int main(int argc, char **argv)
 {
-    const double sim_time = 100;
-    static int show_usage = 0;
-    static int pnum = 0;
+    const double sim_time = 200; ///< Total simulation time
+    static int show_usage = 0;   ///< Flag to indicate if it is necessary to show usage options
+    static int pnum = 0;         ///< Number of processes in the system
 
-    int event, src_pid, dst_pid, req, pid, num_requests = 0,
-        p0_time = 0, p1_time = 0, p2_time = 0;
+    int event,             ///< Current event
+        pid,               ///< ID of the process executing the event
+        num_requests = 0,  ///< Total number of requests in the simulation (used as stop criterion)
+        p0_time = 0,       ///< Time at which process 0 will request the critical region
+        p1_time = 0,       ///< Time at which process 1 will request the critical region
+        p2_time = 0;       ///< Time at which process 2 will request the critical region
+
     struct timeval tp;
     item_fila recvd_msg;
 
@@ -182,6 +205,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    // parse parameters
     int c;
     while (1) {
         static struct option long_options[] = {
@@ -283,26 +307,21 @@ int main(int argc, char **argv)
     printf("-- SIMULATION BEGIN --\n");
     while(time() < sim_time) {
         cause(&event, &pid);
-
         switch(event) {
-            case EV_REQUEST:  // request
+            case EV_REQUEST:
                 printf("Process %d has executed a critical region REQUEST at time %g\n", pid, time());
-
-                // muda estado do processo para WANTED
                 plist[pid].state = ST_WANTED;
-
-                // update logical clock for process pid
+                // update pid's logical clock
                 plist[pid].timestamp++;
                 plist[pid].request_timestamp = plist[pid].timestamp;
-
-                // broadcast to all processes in the system
+                // broadcast REQUEST to all processes in the system
                 broadcast(plist, pnum, pid);
                 break;
 
             case EV_RECV:
-                // remove mensagem da fila com maior prioridade
+                // remove next message to be received by pid
                 recvd_msg = remove_max_filap(plist[pid].recvd_from);
-                // sincroniza relógio lógico no recebimento
+                // synchronize pid's logical clock on receive before processing the message
                 plist[pid].timestamp = (plist[pid].timestamp > recvd_msg->timestamp) ?
                     plist[pid].timestamp : recvd_msg->timestamp;
                 plist[pid].timestamp++;
@@ -311,8 +330,7 @@ int main(int argc, char **argv)
 
                 recv(plist, pnum, pid, recvd_msg->pid, recvd_msg->timestamp, recvd_msg->tipo);
                 break;
-            case EV_RELEASE:  // release critical region
-
+            case EV_RELEASE:
                 printf("Process %d released the critical region at time %g\n", pid, time());
 
                 releasecr(plist, pnum, pid);
@@ -320,8 +338,8 @@ int main(int argc, char **argv)
                 break;
         }
 
-        if (num_requests == 0)
-            break;
+        // no more requests to simulate, simulation ended
+        if (num_requests == 0) break;
     }
     printf("-- SIMULATION END --\n");
 
