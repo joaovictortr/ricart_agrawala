@@ -6,7 +6,7 @@ You can compile the project using make on the root directory:
 
 > make
 
-The generated executable is generated in the bin directory. The executable
+The compiled executable can be found in the bin directory. The executable
 provides a --help flag to show available parameters and how to run the simulation.
 
 ## Generating the Documentation
