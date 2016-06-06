@@ -1,0 +1,7 @@
+Links that present the Ricart Agrawala algorithm in a more detailed manner.
+
+http://tele.informatik.uni-freiburg.de/lehre/ws01/dsys/Lectures/Lecture12.pdf
+
+http://www2.imm.dtu.dk/courses/02222/Spring_2011/W9L2/Chapter_12a.pdf
+
+https://www.cs.rutgers.edu/~pxk/417/notes/10-mutex.html
