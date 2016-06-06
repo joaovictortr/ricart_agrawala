@@ -1,0 +1,348 @@
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Tópicos em Sistemas Distribuídos - Trabalho Prático 2</title>
+</head>
+<body>
+  <h2>Tópicos em Sistemas Distribuídos - Trabalho Prático 2</h2>
+
+  <p>Disciplina: Tópicos em Sistemas Distribuídos -- 2016/1</p>
+  <p>Docente: Prof. Dr. Elias P. Duarte Jr</p>
+  <p>Autor: João Victor Tozatti Risso - GRR: 20120726
+
+  <h3>1) Introdução</h3>
+
+  <p>O presente trabalho tem por objetivo implementar uma simulação do algoritmo de Ricart Agrawala para exclusão mútua distribuída.</p>
+  <p>A implementação foi desenvolvida na linguagem C e utiliza a biblioteca SMPL para simulação dos eventos no sistema distribuído.</p>
+  <p>Na seção 2 apresentamos as decisões e definições que norteram o processo de implementação da simulação. Na seção 3 apresentamos
+    os cenários de teste da simulação e os logs de execução dos mesmos. E na seção 4 a conclusão do trabalho.
+
+  <h3>2) Definições</h3>
+
+  <p>Nesta seção, iremos apresentar as decisões e definições necessárias para a implementação correta da simulação do algoritmo.</p>
+
+  <h4>Eventos</h4>
+
+  <p>A simulação possui três eventos:</p>
+  <ul>
+    <li><i>EV_REQUEST:</i> processo efetua a requisição para executar a região crítica.</li>
+    <li><i>EV_RECV:</i> processo recebe uma mensagem. Se o processo está no estado <i>ST_WANTED</i> e recebe (n-1) <i>replies</i>, executa a região crítica.</li>
+    <li><i>EV_RELEASE:</i> processo libera a região crítica e envia um reply para todos os processos em sua fila <i>pending</i>.</li>
+  </ul>
+
+  <p>Ao executar o evento <i>EV_REQUEST</i>, um processo efetua um <i>broadcast</i> da requisição para todos os processos
+    do sistema. Isto corresponde a um evento <i>EV_RECV</i> no processo destinatário da mensagem. O processo
+    guarda o timestamp da requisição para garantir a ordenação das requisições.</p>
+
+  <p>O evento <i>EV_RECV</i> consiste em desenfilar uma mensagem da fila de prioridades <i>recvd_from</i>. O uso da fila de prioridades
+    garante que as requisições sejam processadas na ordem correta, uma vez que o tempo de transmissão é aleatório.</p>
+
+  <h4>Tipos de Mensagem</h4>
+
+  <p>Devido ao fato do sistema possuir somente um evento de recebimento e não ter um evento <i>reply</i>, as mensagens
+    na fila de recebimento do processo devem possuir um tipo. As mensagens são implementadas no arquivo <i>pqueue.h</i>,
+    na estrutura <i>queue_item</i>.</p>
+
+  <h4>Processos</h4>
+
+  <p>Os processos do sistema distribuído são representados pela estrutura <i>process_t</i>. No início da simulação,
+    são criados e inicializados todos os processos do sistema. A lista de processos na simulação está contida na variável
+    <i>plist</i> na função <i>main</i>.</p>
+
+  <p>A estrutura <i>process_t</i> possui os seguintes campos:</p>
+  <ul>
+    <li><i>state:</i> estado corrente do processo</li>
+    <li><i>timestamp:</i> timestamp corrente do processo</li>
+    <li><i>request_timestamp:</i> timestamp do REQUEST do processo, caso este tenha <i>state = ST_WANTED</i></li>
+    <li><i>recv_queue:</i> fila de recebimento de mensagens. Esta fila é implementada como uma facility SMPL e pode
+      receber até 2*n (onde n é o número de processos do sistema) mensagens.</li>
+    <li><i>recvd_from:</i> fila de prioridades utilizada para ordenar as mensagens recebidas. Através desta fila é possível determinar
+        com precisão o id do processo que enviou a mensagem, seu timestamp o tipo da mensagem. A implementação da fila de priodades
+        está contida no arquivo <i>pqueue.c</i></li>
+    <li><i>nreplies:</i> número de <i>replies</i> recebidos para um <i>requeust</i> enviado. Quando esta variável é igual a (n-1) e <i>state = ST_WANTED</i>, o processo executa a região crítica.</li>
+    <li><i>pending:</i> fila de <i>replies</i> pendentes.</li>
+  </ul>
+
+  <h4>Estados do Processo</h4>
+
+  <p>Cada processo pode estar em um de três estados:</p>
+  <ul>
+    <li><i>ST_RELEASED:</i> o processo não tem interesse ou liberou a região crítica.</li>
+    <li><i>ST_WANTED:</i> o processo fez uma requisição para executar a região crítica.</li>
+    <li><i>ST_HELD:</i> o processo está executando a região crítica.</li>
+  </ul>
+
+  <h4>Estruturas de Dados Adicionais</h4>
+
+  <p>A fila de prioriades <i>pqueue</i> foi utilizada na implementação da simulação para garantir a ordenação
+    no recebimento de mensagens de um processo, pois o tempo de transmissão de mensagens é aleatório. Esta
+    implementação usa como estrutura de dados subjacente um max-heap.</p>
+
+  <p>A ordenação dos processos é garantida através da função que define o valor de prioridade da mensagem
+    na fila de recebimento do processo destinatário. Esta função é dada por:</p>
+  <p style="text-align: center;"><i>INT_MAX - time()</i></p>
+
+  <p>Como a função <i>time</i> é monotonicamente crescente e <i>INT_MAX</i>, a função irá gerar valores decrescentes para as
+  prioridades das mensagens. Portanto, as mensagens que são inseridas posteriormente tem prioridade menor na fila e
+  pela propriedade da fila de prioridades serão processadas posteriormente (em relação) às que tem prioridade maior.</p>
+
+  <h3>3) Logs de Execução</h3>
+  <p>Nesta seção iremos apresentar os cenários de teste e os logs de execução para cada cenário executado.</p>
+
+  <p>Consideramos 4 cenários: um processo faz a requisição da região crítica (trivial), dois processos
+    fazem a requisição da região crítica ao mesmo tempo, três processos fazem a requisição da região
+    crítica ao mesmo tempo e um processo com ID maior faz uma requisição duas unidades de tempo antes
+    do que tem ID menor.</p>
+
+  <p>Os cenários e logs de execução são mostrados abaixo.</p>
+
+  <ol>
+    <li>Um processo faz requisição da região crítica
+      <fieldset>
+        <legend>Log de execução</legend>
+        -- BEGIN HEADER --<br />
+        Ricart-Agrawala algorithm simulation using SMPL<br />
+        Course: Fault-Tolerant Distributed Systems 2016/1<br />
+        Professor: Elias P Duarte Jr<br />
+        Institution: Universidade Federal do Paraná<br />
+        Student: João Victor Tozatti Risso - GRR Nr.: GRR20120726<br />
+        -- END HEADER --<br /><br />
+
+        -- BEGIN PARAMETERS --<br />
+        Number of processes: 3<br />
+        Number of critical region requests: 1<br />
+        Starting events:<br />
+          - Process 0 will request the critical region at time 15<br />
+        -- END PARAMETERS --<br /><br />
+
+        -- SIMULATION BEGIN --<br />
+        Process 0 has executed a critical region REQUEST at time 15<br />
+          |- REQUEST scheduled to occur on process 1 at time 18<br />
+          |- REQUEST scheduled to occur on process 2 at time 17<br />
+        Process 2 received REQUEST from 0 at time 17<br />
+          |- REPLY scheduled to occur on process 0 at time 20<br />
+        Process 1 received REQUEST from 0 at time 18<br />
+          |- REPLY scheduled to occur on process 0 at time 21<br />
+        Process 0 received REPLY from 2 at time 20<br />
+        Process 0 received REPLY from 1 at time 21<br />
+        Process 0 entered the critical region at time 21<br />
+        Process 0 released the critical region at time 26<br />
+        -- SIMULATION END --
+      </fieldset>
+
+      <p>Este exemplo ilustra o funcionamento correto do programa para uma única requisição da região crítica.</p>
+    </li>
+    <li>Dois processos (0 e 2) fazem requisição da região crítica ao mesmo tempo
+
+      <p>Neste caso, espera-se que o processo 0 deve acessar a região crítica antes do processo 1, uma vez que o ID de 0 é menor que o de 1.</p>
+      <p>O log de execução é mostrado abaixo:</p>
+      <fieldset>
+        <legend>Log de execução</legend>
+          -- BEGIN HEADER --<br />
+          Ricart-Agrawala algorithm simulation using SMPL<br />
+          Course: Fault-Tolerant Distributed Systems 2016/1<br />
+          Professor: Elias P Duarte Jr<br />
+          Institution: Universidade Federal do Paraná<br />
+          Student: João Victor Tozatti Risso - GRR Nr.: GRR20120726<br />
+          -- END HEADER --<br /><br />
+
+          -- BEGIN PARAMETERS --<br />
+          Number of processes: 3<br />
+          Number of critical region requests: 2<br />
+          Starting events:<br />
+            - Process 0 will request the critical region at time 10<br />
+            - Process 2 will request the critical region at time 10<br />
+          -- END PARAMETERS --<br /><br />
+
+          -- SIMULATION BEGIN --<br />
+          Process 0 has executed a critical region REQUEST at time 10<br />
+            |- REQUEST scheduled to occur on process 1 at time 13<br />
+            |- REQUEST scheduled to occur on process 2 at time 12<br /><br />
+          Process 2 has executed a critical region REQUEST at time 10<br />
+            |- REQUEST scheduled to occur on process 0 at time 13<br />
+            |- REQUEST scheduled to occur on process 1 at time 13<br /><br />
+          Process 2 received REQUEST from 0 at time 12<br />
+            |- REPLY scheduled to occur on process 0 at time 17<br /><br />
+          Process 1 received REQUEST from 0 at time 13<br />
+            |- REPLY scheduled to occur on process 0 at time 15<br /><br />
+          Process 0 received REQUEST from 2 at time 13<br />
+            |- REQUEST 2 was enqueued<br />
+            |- pending(0) = 0 0 1 <br /><br />
+          Process 1 received REQUEST from 2 at time 13<br />
+            |- REPLY scheduled to occur on process 2 at time 18<br /><br />
+          Process 0 received REPLY from 2 at time 15<br />
+          Process 0 received REPLY from 1 at time 17<br />
+          Process 0 entered the critical region at time 17<br />
+          Process 2 received REPLY from 1 at time 18<br />
+          Process 0 released the critical region at time 22<br />
+          Process 0 sent *pending* REPLY to process 2<br />
+            |- REPLY scheduled to occur on process 2 at time 26<br /><br />
+          Process 2 received REPLY from 0 at time 26<br />
+          Process 2 entered the critical region at time 26<br />
+          Process 2 released the critical region at time 31<br />
+          -- SIMULATION END --
+      </fieldset>
+
+      <p>Este exemplo ilustra o funcionamento correto do programa quando dois processos requisitam a região crítica ao mesmo tempo.</p>
+       <p>Embora os processos 0 e 2 efetuem a requisição da região crítica ao mesmo tempo, 0 guarda a requisição de 2 em sua fila de
+          requisições pendentes para resposta, portanto garantindo acesso sequencial à região crítica.</p>
+    </li>
+    <li>Três processos (0, 1 e 2) fazem requisição da região crítica ao mesmo tempo
+        <p>Neste cenários, temos que a sequência de execução na região crítica deve ser: 0, 1, 2. Isto se deve ao
+            fato de que os processos fazem a requisição da região crítica ao mesmo tempo e portanto, assim como
+            no caso anterior, a ordenação pelo ID dos processos prevalece.</p>
+        <p>O log de execução é mostrado abaixo:</p>
+        <fieldset>
+          <legend>Log de execução</legend>
+          -- BEGIN HEADER --<br />
+          Ricart-Agrawala algorithm simulation using SMPL<br />
+          Course: Fault-Tolerant Distributed Systems 2016/1<br />
+          Professor: Elias P Duarte Jr<br />
+          Institution: Universidade Federal do Paraná<br />
+          Student: João Victor Tozatti Risso - GRR Nr.: GRR20120726<br />
+          -- END HEADER --<br /><br />
+
+          -- BEGIN PARAMETERS --<br />
+          Number of processes: 3<br />
+          Number of critical region requests: 3<br />
+          Starting events:<br />
+            - Process 0 will request the critical region at time 10<br />
+            - Process 1 will request the critical region at time 10<br />
+            - Process 2 will request the critical region at time 10<br />
+          -- END PARAMETERS --<br /><br />
+
+          -- SIMULATION BEGIN --<br />
+          Process 0 has executed a critical region REQUEST at time 10<br />
+            |- REQUEST scheduled to occur on process 1 at time 13<br />
+            |- REQUEST scheduled to occur on process 2 at time 12<br /><br />
+          Process 1 has executed a critical region REQUEST at time 10<br />
+            |- REQUEST scheduled to occur on process 0 at time 13<br />
+            |- REQUEST scheduled to occur on process 2 at time 13<br /><br />
+          Process 2 has executed a critical region REQUEST at time 10<br />
+            |- REQUEST scheduled to occur on process 0 at time 15<br />
+            |- REQUEST scheduled to occur on process 1 at time 12<br /><br />
+          Process 2 received REQUEST from 0 at time 12<br />
+            |- REPLY scheduled to occur on process 0 at time 17<br /><br />
+          Process 1 received REQUEST from 0 at time 12<br />
+            |- REPLY scheduled to occur on process 0 at time 16<br /><br />
+          Process 1 received REQUEST from 2 at time 13<br />
+            |- REQUEST 2 was enqueued<br />
+            |- pending(1) = 0 0 1 <br /><br />
+          Process 0 received REQUEST from 1 at time 13<br />
+            |- REQUEST 1 was enqueued<br />
+            |- pending(0) = 0 1 0 <br /><br />
+          Process 2 received REQUEST from 1 at time 13<br />
+            |- REPLY scheduled to occur on process 1 at time 18<br /><br />
+          Process 0 received REQUEST from 2 at time 15<br />
+            |- REQUEST 2 was enqueued<br />
+            |- pending(0) = 0 1 1 <br /><br />
+          Process 0 received REPLY from 2 at time 16<br />
+          Process 0 received REPLY from 1 at time 17<br />
+          Process 0 entered the critical region at time 17<br />
+          Process 1 received REPLY from 2 at time 18<br />
+          Process 0 released the critical region at time 22<br />
+          Process 0 sent *pending* REPLY to process 1<br />
+            |- REPLY scheduled to occur on process 1 at time 25<br /><br />
+          Process 0 sent *pending* REPLY to process 2<br />
+            |- REPLY scheduled to occur on process 2 at time 24<br /><br />
+          Process 2 received REPLY from 0 at time 24<br />
+          Process 1 received REPLY from 0 at time 25<br />
+          Process 1 entered the critical region at time 25<br />
+          Process 1 released the critical region at time 30<br />
+          Process 1 sent *pending* REPLY to process 2<br />
+            |- REPLY scheduled to occur on process 2 at time 31<br /><br />
+          Process 2 received REPLY from 1 at time 31<br />
+          Process 2 entered the critical region at time 31<br />
+          Process 2 released the critical region at time 36<br />
+          -- SIMULATION END --
+        </fieldset>
+
+        <p>Pelo log de execução, podemos concluir que a ordenação correta dos processos (0 -> 1 -> 2) foi gerada na simulação, conforme esperado.</p>
+    </li>
+    <li>Dois processos (0 e 1) executam a região crítica e tempos diferentes
+
+        <p>O processo 0 é escalonado em 12 unidades de tempo a partir do início da simulação e o processo 1 é escalonado em 10 unidades de tempo a partir do início da simulação.</p>
+        <p>Neste caso, 0 deve executar a região crítica antes de 1, pois com 2 unidades de tempo, o processo 0 ainda pode efetuar a requisição da região crítica antes de 1, uma
+            vez que o timestamp dos dois requests são iguais.</p>
+        <fieldset>
+            <legend>Log de Execução</legend>
+            -- BEGIN HEADER --<br />
+            Ricart-Agrawala algorithm simulation using SMPL<br />
+            Course: Fault-Tolerant Distributed Systems 2016/1<br />
+            Professor: Elias P Duarte Jr<br />
+            Institution: Universidade Federal do Paraná<br />
+            Student: João Victor Tozatti Risso - GRR Nr.: GRR20120726<br />
+            -- END HEADER --<br /><br />
+
+            -- BEGIN PARAMETERS --<br />
+            Number of processes: 3<br />
+            Number of critical region requests: 2<br />
+            Starting events:<br />
+              - Process 0 will request the critical region at time 12<br />
+              - Process 1 will request the critical region at time 10<br />
+            -- END PARAMETERS --<br /><br />
+
+            -- SIMULATION BEGIN --<br />
+            Process 1 has executed a critical region REQUEST at time 10<br />
+              |- REQUEST scheduled to occur on process 0 at time 13<br />
+              |- REQUEST scheduled to occur on process 2 at time 12<br /><br />
+            Process 0 has executed a critical region REQUEST at time 12<br />
+              |- REQUEST scheduled to occur on process 1 at time 15<br />
+              |- REQUEST scheduled to occur on process 2 at time 15<br /><br />
+            Process 2 received REQUEST from 1 at time 12<br />
+              |- REPLY scheduled to occur on process 1 at time 17<br /><br />
+            Process 0 received REQUEST from 1 at time 13<br />
+              |- REQUEST 1 was enqueued<br />
+              |- pending(0) = 0 1 0 <br /><br />
+            Process 1 received REQUEST from 0 at time 15<br />
+              |- REPLY scheduled to occur on process 0 at time 17<br /><br />
+            Process 2 received REQUEST from 0 at time 15<br />
+              |- REPLY scheduled to occur on process 0 at time 20<br /><br />
+            Process 1 received REPLY from 2 at time 17<br />
+            Process 0 received REPLY from 1 at time 17<br />
+            Process 0 received REPLY from 2 at time 20<br />
+            Process 0 entered the critical region at time 20<br />
+            Process 0 released the critical region at time 25<br />
+            Process 0 sent *pending* REPLY to process 1<br />
+              |- REPLY scheduled to occur on process 1 at time 29<br /><br />
+            Process 1 received REPLY from 0 at time 29<br />
+            Process 1 entered the critical region at time 29<br />
+            Process 1 released the critical region at time 34<br />
+            -- SIMULATION END --
+        </fieldset>
+
+        <p>Pelo log acima, podemos verificar que a simulação se comporta conforme o esperado, ou seja, o processo 0 executa a região crítica antes do processo 1
+        mesmo que 1 tenha feito a requisição da região crítica duas unidades de tempo antes.</p>
+    </li>
+  </ol>
+
+  <h3>Conclusão</h3>
+
+  <p>Neste trabalho apresentamos a implementação de uma simulação do algoritmo de exclusão mútua distribuída de Ricart Agrawala.</p>
+  <p>A implementação foi validada através de 4 cenários de teste e os logs de execução dos mesmos indicam a corretude da implementação.</p>
+  
+
+  <h3>Apêndice: Código Fonte</h3>
+
+  <p>Nos links abaixo podem ser baixados os códigos fonte do trabalho. Alternativamente, um
+    repositório do projeto no GitHub também é fornecido e permite a visualização do
+    código em modo texto.</p>
+  <p>No caso do projeto do GitHub, existe uma forma automática de geração de documentação através da ferramenta
+    Doxygen. Para gerar a documentação basta utilizar o comando <i>make doc</i>.</p>
+  <p>A compilação do executável pode ser feita através do comando <i>make</i> na raiz do projeto. O executável
+    é compilado e colocado no diretório <i>bin</i>.</p>
+  <p>O executável pode ser executado com a flag <i>--help</i>, que mostra como utilizar o programa.</p>
+
+  <p>Código fonte:</p>
+  <ul>
+    <li><a href="http://www.inf.ufpr.br/jvtr12/sisdis-tp2/main.c.txt" target="_blank">main.c</a></li>
+    <li><a href="http://www.inf.ufpr.br/jvtr12/sisdis-tp2/pqueue.h.txt" target="_blank">pqueue.h</a></li>
+    <li><a href="http://www.inf.ufpr.br/jvtr12/sisdis-tp2/pqueue.c.txt" target="_blank">pqueue.c</a></li>
+    <li><a href="http://www.inf.ufpr.br/jvtr12/sisdis-tp2/rand.c.txt" target="_blank">rand.c</a></li>
+    <li><a href="http://www.inf.ufpr.br/jvtr12/sisdis-tp2/smpl.c.txt" target="_blank">smpl.c</a></li>
+    <li><a href="http://www.inf.ufpr.br/jvtr12/sisdis-tp2/smpl.h.txt" target="_blank">smpl.h</a></li>
+  </ul>
+
+  <p><a href="" target="_blank">Projeto Completo no Github</a></p>
+</body>
+</html>
