@@ -1,6 +1,6 @@
 # Ricart Agrawala Simulation using SMPL
 
-## To compile and execute
+## Compiling and Running
 
 You can compile the project using make on the root directory:
 
@@ -9,7 +9,7 @@ You can compile the project using make on the root directory:
 The generated executable is generated in the bin directory. The executable
 provides a --help flag to show available parameters and how to run the simulation.
 
-## To compile the documentation
+## Generating the Documentation
 
 In order to generate the documentation, you must have Doxygen installed. On the root of the project, you can just type:
 
