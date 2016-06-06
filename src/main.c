@@ -64,8 +64,8 @@ process init_processes(int pnum)
         plist[i].state = ST_RELEASED;
         plist[i].timestamp = 0;
         plist[i].request_timestamp = 0;
-        plist[i].recv_queue = facility("recvq", pnum);
-        plist[i].recvd_from = create_pqueue(pnum);
+        plist[i].recv_queue = facility("recvq", 2 * pnum);
+        plist[i].recvd_from = create_pqueue(2 * pnum);
         plist[i].nreplies = 0;
         plist[i].pending = malloc(sizeof(int) * pnum);
         memset(plist[i].pending, 0, sizeof(int) * pnum);
@@ -376,6 +376,8 @@ int main(int argc, char **argv)
                 printf("Process %d received %s from %d at time %g\n", pid, (recvd_msg->type == MSG_REQUEST) ? "REQUEST" : "REPLY", recvd_msg->pid, time());
 
                 recv(plist, pnum, pid, recvd_msg->pid, recvd_msg->timestamp, recvd_msg->type);
+
+                free(recvd_msg);
                 break;
             case EV_RELEASE:
                 printf("Process %d released the critical region at time %g\n", pid, time());
